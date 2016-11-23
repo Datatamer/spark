@@ -399,7 +399,7 @@ private[spark] class MesosClusterScheduler(
       // Sandbox points to the current directory by default with Mesos.
       (cmdExecutable, ".")
     }
-    val primaryResource = new File(sandboxPath, desc.jarUrl.split("/").last).toString()
+    val primaryResource = desc.jarUrl.split("/").last
     val cmdOptions = generateCmdOption(desc, sandboxPath).mkString(" ")
     val appArguments = desc.command.arguments.mkString(" ")
     builder.setValue(s"$executable $cmdOptions $primaryResource $appArguments")
@@ -408,6 +408,9 @@ private[spark] class MesosClusterScheduler(
       setupUris(uris, builder)
     }
     desc.schedulerProperties.get("spark.mesos.uris").map { uris =>
+      setupUris(uris, builder)
+    }
+    desc.schedulerProperties.get("spark.jars").map { uris =>
       setupUris(uris, builder)
     }
     desc.schedulerProperties.get("spark.submit.pyFiles").map { pyFiles =>
@@ -422,6 +425,12 @@ private[spark] class MesosClusterScheduler(
       "--master", s"mesos://${conf.get("spark.master")}",
       "--driver-cores", desc.cores.toString,
       "--driver-memory", s"${desc.mem}M")
+
+    if (desc.schedulerProperties.get("spark.jars").isDefined) {
+      val jarFiles = desc.schedulerProperties.get("spark.jars").get
+        .split(",").map(uri => uri.substring(uri.lastIndexOf('/') + 1)).mkString(",")
+      options ++= Seq("--jars", jarFiles)
+    }
 
     val replicatedOptionsBlacklist = Set(
       "spark.jars", // Avoids duplicate classes in classpath
