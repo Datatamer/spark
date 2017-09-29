@@ -433,8 +433,8 @@ private[spark] class MesosClusterScheduler(
       // Sandbox points to the current directory by default with Mesos.
       (cmdExecutable, ".")
     }
+    val primaryResource = desc.jarUrl.split("/").last
     val cmdOptions = generateCmdOption(desc, sandboxPath).mkString(" ")
-    val primaryResource = new File(sandboxPath, desc.jarUrl.split("/").last).toString()
     val appArguments = desc.command.arguments.mkString(" ")
 
     s"$executable $cmdOptions $primaryResource $appArguments"
@@ -445,6 +445,12 @@ private[spark] class MesosClusterScheduler(
     builder.setValue(getDriverCommandValue(desc))
     builder.setEnvironment(getDriverEnvironment(desc))
     builder.addAllUris(getDriverUris(desc).asJava)
+
+
+    desc.conf.get("spark.jars").map { uris =>
+      setupUris(uris, builder)
+    }
+
     builder.build()
   }
 
@@ -454,6 +460,12 @@ private[spark] class MesosClusterScheduler(
       "--master", s"mesos://${conf.get("spark.master")}",
       "--driver-cores", desc.cores.toString,
       "--driver-memory", s"${desc.mem}M")
+
+    if (desc.conf.getOption("spark.jars").isDefined) {
+      val jarFiles = desc.conf.get("spark.jars").get
+        .split(",").map(uri => uri.substring(uri.lastIndexOf('/') + 1)).mkString(",")
+      options ++= Seq("--jars", jarFiles)
+    }
 
     // Assume empty main class means we're running python
     if (!desc.command.mainClass.equals("")) {
